@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2, Home } from 'lucide-react';
 
 const Login = () => {
@@ -13,6 +14,7 @@ const Login = () => {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [role, setRole] = useState<'admin' | 'tenant'>('tenant');
   const { signIn, user } = useAuth();
   const navigate = useNavigate();
 
@@ -29,7 +31,7 @@ const Login = () => {
     setError('');
     setLoading(true);
     try {
-      const { error } = await signIn(email, password);
+      const { error } = await signIn(email, password, role);
       if (error) {
         setError(error.message || 'Sign in failed');
         return;
@@ -88,6 +90,25 @@ const Login = () => {
                 required
                 disabled={loading}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Role (for testing)</Label>
+              <RadioGroup
+                defaultValue="tenant"
+                className="flex space-x-4"
+                onValueChange={(value: 'admin' | 'tenant') => setRole(value)}
+                disabled={loading}
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="tenant" id="login-tenant" />
+                  <Label htmlFor="login-tenant">Tenant</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="admin" id="login-admin" />
+                  <Label htmlFor="login-admin">Admin</Label>
+                </div>
+              </RadioGroup>
             </div>
             
             <Button type="submit" className="w-full" disabled={loading}>

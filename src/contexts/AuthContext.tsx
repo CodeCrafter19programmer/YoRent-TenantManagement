@@ -7,9 +7,9 @@ interface AuthContextType {
   session: Session | null;
   userRole: 'admin' | 'tenant' | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: any }>;
+  signIn: (email: string, password: string, role: 'admin' | 'tenant') => Promise<{ error: any }>;
   signOut: () => Promise<void>;
-  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string, role: 'admin' | 'tenant') => Promise<{ error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -90,13 +90,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, role: 'admin' | 'tenant') => {
     try {
       const result = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       console.log('Sign-in result:', { error: result.error, user: result.data?.user?.id });
+      if (!result.error && result.data.user) {
+        // Upsert the role for testing purposes
+        await supabase.from('user_roles').upsert(
+          { user_id: result.data.user.id, role },
+          { onConflict: 'user_id' }
+        );
+        await fetchUserRole(result.data.user.id);
+      }
       return { error: result.error };
     } catch (err: any) {
       console.error('Sign-in exception:', err);
@@ -104,7 +112,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, password: string, fullName: string) => {
+  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'tenant') => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -116,17 +124,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
 
     if (!error && data.user) {
-      // Create profile
       await supabase.from('profiles').insert({
         id: data.user.id,
         email,
         full_name: fullName,
       });
 
-      // Assign tenant role by default
+      // Assign the selected role
       await supabase.from('user_roles').insert({
         user_id: data.user.id,
-        role: 'tenant',
+        role: role,
       });
     }
 
