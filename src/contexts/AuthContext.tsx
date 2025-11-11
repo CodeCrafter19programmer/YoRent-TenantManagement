@@ -7,9 +7,9 @@ interface AuthContextType {
   session: Session | null;
   userRole: 'admin' | 'tenant' | null;
   loading: boolean;
-  signIn: (email: string, password: string, role: 'admin' | 'tenant') => Promise<{ error: any }>;
+  signIn: (email: string, password: string) => Promise<{ error: any }>;
   signOut: () => Promise<void>;
-  signUp: (email: string, password: string, fullName: string, role: 'admin' | 'tenant') => Promise<{ error: any }>;
+  signUp: (email: string, password: string, fullName: string) => Promise<{ error: any }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -90,7 +90,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signIn = async (email: string, password: string, role: 'admin' | 'tenant') => {
+  const signIn = async (email: string, password: string) => {
     try {
       const result = await supabase.auth.signInWithPassword({
         email,
@@ -98,7 +98,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       console.log('Sign-in result:', { error: result.error, user: result.data?.user?.id });
       if (!result.error && result.data.user) {
-        // Upsert the role for testing purposes
+        // Automatically determine role based on email
+        const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || 'admin@yorent.com';
+        const role = email.toLowerCase() === adminEmail.toLowerCase() ? 'admin' : 'tenant';
+        
+        // Upsert the role
         await supabase.from('user_roles').upsert(
           { user_id: result.data.user.id, role },
           { onConflict: 'user_id' }
@@ -112,7 +116,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signUp = async (email: string, password: string, fullName: string, role: 'admin' | 'tenant') => {
+  const signUp = async (email: string, password: string, fullName: string) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -130,7 +134,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         full_name: fullName,
       });
 
-      // Assign the selected role
+      // Automatically determine role based on email
+      const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || 'admin@yorent.com';
+      const role = email.toLowerCase() === adminEmail.toLowerCase() ? 'admin' : 'tenant';
+
+      // Assign the role
       await supabase.from('user_roles').insert({
         user_id: data.user.id,
         role: role,

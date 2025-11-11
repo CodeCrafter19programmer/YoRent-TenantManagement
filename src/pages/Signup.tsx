@@ -6,14 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Loader2, Home } from 'lucide-react';
 
 const Signup = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
-  const [role, setRole] = useState<'admin' | 'tenant'>('tenant');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
@@ -25,7 +23,7 @@ const Signup = () => {
     setLoading(true);
     setError('');
 
-    const { error } = await signUp(email, password, fullName, role);
+    const { error } = await signUp(email, password, fullName);
 
     if (error) {
       setError(error.message);
@@ -71,7 +69,7 @@ const Signup = () => {
           </div>
           <CardTitle className="text-2xl text-center">Create Account</CardTitle>
           <CardDescription className="text-center">
-            Choose your role and create an account
+            Sign up to get started
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -120,25 +118,6 @@ const Signup = () => {
                 disabled={loading}
                 minLength={6}
               />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <RadioGroup
-                defaultValue="tenant"
-                className="flex space-x-4"
-                onValueChange={(value: 'admin' | 'tenant') => setRole(value)}
-                disabled={loading}
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="tenant" id="tenant" />
-                  <Label htmlFor="tenant">Tenant</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="admin" id="admin" />
-                  <Label htmlFor="admin">Admin</Label>
-                </div>
-              </RadioGroup>
             </div>
             
             <Button type="submit" className="w-full" disabled={loading}>
