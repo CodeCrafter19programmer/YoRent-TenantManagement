@@ -1,4 +1,4 @@
-import { Home, Building2, Users, DollarSign, Receipt, Settings, CreditCard, Bell, Calculator, LogOut } from "lucide-react";
+import { Home, Building2, Users, DollarSign, Receipt, Settings, CreditCard, Bell, Calculator, LogOut, Shield } from "lucide-react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ const adminMenuItems = [
   { title: "Tenants", url: "/tenants", icon: Users },
   { title: "Rent Management", url: "/rent", icon: DollarSign },
   { title: "Expenses", url: "/expenses", icon: Receipt },
+  { title: "Policies", url: "/policies", icon: Shield },
   { title: "Settings", url: "/settings", icon: Settings },
 ];
 

@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,20 +9,30 @@ import { Layout } from "@/components/Layout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import RoleBasedRedirect from "@/components/RoleBasedRedirect";
 import NotificationService from "@/services/notificationService";
-import Dashboard from "./pages/Dashboard";
-import Properties from "./pages/Properties";
-import Tenants from "./pages/Tenants";
-import RentManagement from "./pages/RentManagement";
-import Expenses from "./pages/Expenses";
-import Settings from "./pages/Settings";
-import Login from "./pages/Login";
-import Signup from "./pages/Signup";
-import TenantDashboard from "./pages/TenantDashboard";
-import AdminPayments from "./pages/AdminPayments";
-import AdminNotifications from "./pages/AdminNotifications";
-import TaxAccountability from "./pages/TaxAccountability";
-import Unauthorized from "./pages/Unauthorized";
-import NotFound from "./pages/NotFound";
+
+// Lazy load pages for better performance
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Properties = lazy(() => import("./pages/Properties"));
+const Tenants = lazy(() => import("./pages/Tenants"));
+const RentManagement = lazy(() => import("./pages/RentManagement"));
+const Expenses = lazy(() => import("./pages/Expenses"));
+const Policies = lazy(() => import("./pages/Policies"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Login = lazy(() => import("./pages/Login"));
+const Signup = lazy(() => import("./pages/Signup"));
+const TenantDashboard = lazy(() => import("./pages/TenantDashboard"));
+const AdminPayments = lazy(() => import("./pages/AdminPayments"));
+const AdminNotifications = lazy(() => import("./pages/AdminNotifications"));
+const TaxAccountability = lazy(() => import("./pages/TaxAccountability"));
+const Unauthorized = lazy(() => import("./pages/Unauthorized"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+
+// Loading component
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600"></div>
+  </div>
+);
 
 const queryClient = new QueryClient();
 
@@ -35,11 +46,12 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter>
-          <Routes>
-            {/* Public routes */}
-            <Route path="/login" element={<Login />} />
-            <Route path="/signup" element={<Signup />} />
-            <Route path="/unauthorized" element={<Unauthorized />} />
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              {/* Public routes */}
+              <Route path="/login" element={<Login />} />
+              <Route path="/signup" element={<Signup />} />
+              <Route path="/unauthorized" element={<Unauthorized />} />
             
             {/* Role-based redirect for root path */}
             <Route path="/" element={<RoleBasedRedirect />} />
@@ -90,6 +102,11 @@ const App = () => (
                 <Layout><Settings /></Layout>
               </ProtectedRoute>
             } />
+            <Route path="/policies" element={
+              <ProtectedRoute requiredRole="admin">
+                <Layout><Policies /></Layout>
+              </ProtectedRoute>
+            } />
             
             {/* Protected tenant routes */}
             <Route path="/tenant/dashboard" element={
@@ -100,7 +117,8 @@ const App = () => (
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
-          </Routes>
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </AuthProvider>
     </TooltipProvider>

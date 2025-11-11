@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Bell, CreditCard, Home, Calendar, DollarSign, AlertTriangle } from 'lucide-react';
+import { Bell, CreditCard, Home, Calendar, DollarSign, AlertTriangle, Shield } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface TenantData {
@@ -38,11 +38,19 @@ interface Notification {
   created_at: string;
 }
 
+interface Policy {
+  id: string;
+  title: string;
+  content: string;
+  category: string;
+}
+
 const TenantDashboard = () => {
   const { user, signOut } = useAuth();
   const [tenantData, setTenantData] = useState<TenantData | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [policies, setPolicies] = useState<Policy[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -50,6 +58,7 @@ const TenantDashboard = () => {
       fetchTenantData();
       fetchPayments();
       fetchNotifications();
+      fetchPolicies();
       
       // Subscribe to real-time updates
       const paymentsSubscription = supabase
@@ -133,6 +142,21 @@ const TenantDashboard = () => {
       console.error('Error fetching notifications:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPolicies = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('policies')
+        .select('id, title, content, category')
+        .eq('is_active', true)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPolicies(data || []);
+    } catch (error) {
+      console.error('Error fetching policies:', error);
     }
   };
 
@@ -377,6 +401,34 @@ const TenantDashboard = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Policies Section */}
+        {policies.length > 0 && (
+          <Card className="mt-8">
+            <CardHeader>
+              <CardTitle className="flex items-center">
+                <Shield className="h-5 w-5 mr-2" />
+                Property Rules & Policies
+              </CardTitle>
+              <CardDescription>
+                Important rules and guidelines from your landlord
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {policies.map((policy) => (
+                  <div key={policy.id} className="border rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-semibold text-lg">{policy.title}</h3>
+                      <Badge variant="outline">{policy.category}</Badge>
+                    </div>
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">{policy.content}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Upcoming Payments Alert */}
         {getUpcomingPayments().length > 0 && (

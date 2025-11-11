@@ -1,15 +1,16 @@
-import { useState } from "react";
-import { Receipt, Plus, TrendingDown, Calendar, DollarSign } from "lucide-react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { StatCard } from "@/components/StatCard";
+import { useState, useEffect } from 'react';
+import { Receipt, Plus, TrendingDown, Calendar, DollarSign, Edit, Trash2 } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { StatCard } from '@/components/StatCard';
+import { supabase } from '@/integrations/supabase/client';
+import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 import {
   BarChart,
   Bar,
@@ -18,109 +19,273 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-} from "recharts";
+} from 'recharts';
 
-const expenses = [
-  {
-    id: 1,
-    property: "Apartment 101",
-    category: "Repairs",
-    description: "Fixed broken water heater",
-    amount: 450,
-    date: "Jan 12, 2025",
-  },
-  {
-    id: 2,
-    property: "House 23",
-    category: "Maintenance",
-    description: "Lawn care and landscaping",
-    amount: 120,
-    date: "Jan 8, 2025",
-  },
-  {
-    id: 3,
-    property: "Shop 5",
-    category: "Utilities",
-    description: "Water bill - January",
-    amount: 85,
-    date: "Jan 5, 2025",
-  },
-  {
-    id: 4,
-    property: "Building A",
-    category: "Cleaning",
-    description: "Common area cleaning",
-    amount: 200,
-    date: "Jan 15, 2025",
-  },
-  {
-    id: 5,
-    property: "Apartment 205",
-    category: "Repairs",
-    description: "Fixed leaking faucet",
-    amount: 75,
-    date: "Jan 18, 2025",
-  },
-];
+interface Expense {
+  id: string;
+  property_id: string;
+  category: string;
+  description: string;
+  amount: number;
+  expense_date: string;
+  properties?: {
+    name: string;
+  };
+}
 
-const monthlyExpenses = [
-  { month: "Jan", amount: 930 },
-  { month: "Feb", amount: 780 },
-  { month: "Mar", amount: 1200 },
-  { month: "Apr", amount: 650 },
-  { month: "May", amount: 890 },
-  { month: "Jun", amount: 1100 },
-];
+interface Property {
+  id: string;
+  name: string;
+}
 
-const Expenses = () => {
-  const [filterCategory, setFilterCategory] = useState("all");
+const ExpensesNew = () => {
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [properties, setProperties] = useState<Property[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterCategory, setFilterCategory] = useState('all');
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null);
+  const { toast } = useToast();
+
+  const [expenseForm, setExpenseForm] = useState({
+    property_id: '',
+    category: 'utilities',
+    description: '',
+    amount: 0,
+    expense_date: '',
+  });
+
+  useEffect(() => {
+    fetchExpenses();
+    fetchProperties();
+
+    // Real-time subscription
+    const subscription = supabase
+      .channel('expenses-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'utilities_expenses' }, () => {
+        fetchExpenses();
+      })
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const fetchExpenses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('utilities_expenses')
+        .select(`
+          *,
+          properties (name)
+        `)
+        .order('expense_date', { ascending: false });
+
+      if (error) throw error;
+      setExpenses(data || []);
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchProperties = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('properties')
+        .select('id, name');
+
+      if (error) throw error;
+      setProperties(data || []);
+    } catch (error: any) {
+      console.error('Error fetching properties:', error);
+    }
+  };
+
+  const handleAddExpense = async () => {
+    try {
+      const { error } = await supabase
+        .from('utilities_expenses')
+        .insert([expenseForm]);
+
+      if (error) throw error;
+
+      toast({ title: 'Success', description: 'Expense added successfully' });
+      setAddDialogOpen(false);
+      resetForm();
+      fetchExpenses();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleUpdateExpense = async () => {
+    if (!selectedExpense) return;
+
+    try {
+      const { error } = await supabase
+        .from('utilities_expenses')
+        .update(expenseForm)
+        .eq('id', selectedExpense.id);
+
+      if (error) throw error;
+
+      toast({ title: 'Success', description: 'Expense updated successfully' });
+      setEditDialogOpen(false);
+      setSelectedExpense(null);
+      fetchExpenses();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const handleDeleteExpense = async (expenseId: string) => {
+    if (!confirm('Are you sure you want to delete this expense?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('utilities_expenses')
+        .delete()
+        .eq('id', expenseId);
+
+      if (error) throw error;
+
+      toast({ title: 'Success', description: 'Expense deleted successfully' });
+      fetchExpenses();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const openEditDialog = (expense: Expense) => {
+    setSelectedExpense(expense);
+    setExpenseForm({
+      property_id: expense.property_id,
+      category: expense.category,
+      description: expense.description,
+      amount: expense.amount,
+      expense_date: expense.expense_date,
+    });
+    setEditDialogOpen(true);
+  };
+
+  const resetForm = () => {
+    setExpenseForm({
+      property_id: '',
+      category: 'utilities',
+      description: '',
+      amount: 0,
+      expense_date: '',
+    });
+  };
 
   const filteredExpenses = expenses.filter(
-    (expense) => filterCategory === "all" || expense.category === filterCategory
+    (expense) => filterCategory === 'all' || expense.category === filterCategory
   );
 
-  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
-  const avgMonthlyExpenses = monthlyExpenses.reduce((sum, m) => sum + m.amount, 0) / monthlyExpenses.length;
+  // Calculate stats
+  const currentMonth = format(new Date(), 'MMMM yyyy');
+  const currentMonthExpenses = expenses.filter(e => 
+    format(new Date(e.expense_date), 'MMMM yyyy') === currentMonth
+  );
+  const totalThisMonth = currentMonthExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const totalAllTime = expenses.reduce((sum, e) => sum + e.amount, 0);
 
-  // Calculate rent collected vs expenses (mock data)
-  const rentCollected = 49000;
-  const profit = rentCollected - totalExpenses;
+  // Group by category
+  const expensesByCategory = expenses.reduce((acc, expense) => {
+    acc[expense.category] = (acc[expense.category] || 0) + expense.amount;
+    return acc;
+  }, {} as Record<string, number>);
+
+  // Prepare chart data (last 6 months)
+  const last6Months = Array.from({ length: 6 }, (_, i) => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - i);
+    return format(date, 'MMM');
+  }).reverse();
+
+  const monthlyExpenses = last6Months.map(month => {
+    const monthExpenses = expenses.filter(e => 
+      format(new Date(e.expense_date), 'MMM') === month
+    );
+    return {
+      month,
+      amount: monthExpenses.reduce((sum, e) => sum + e.amount, 0),
+    };
+  });
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Expenses</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Expenses & Utilities</h1>
           <p className="text-muted-foreground mt-1">
-            Track and manage property-related expenses
+            Track property maintenance costs and utility expenses
           </p>
         </div>
-        <Button className="bg-primary hover:bg-primary-dark">
+        <Button onClick={() => setAddDialogOpen(true)} className="bg-primary hover:bg-primary-dark">
           <Plus className="mr-2 h-4 w-4" />
           Add Expense
         </Button>
       </div>
 
       {/* Stats */}
-      <div className="grid gap-6 md:grid-cols-3">
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Total Expenses (Jan)"
-          value={`$${totalExpenses.toLocaleString()}`}
-          icon={Receipt}
+          title="Total This Month"
+          value={`$${totalThisMonth.toLocaleString()}`}
+          icon={Calendar}
+          trend={{ value: currentMonth, isPositive: false }}
           variant="danger"
         />
         <StatCard
-          title="Average Monthly"
-          value={`$${Math.round(avgMonthlyExpenses).toLocaleString()}`}
-          icon={TrendingDown}
-          variant="warning"
+          title="Total Expenses"
+          value={`$${totalAllTime.toLocaleString()}`}
+          icon={DollarSign}
+          trend={{ value: `${expenses.length} records`, isPositive: false }}
+          variant="default"
         />
         <StatCard
-          title="Net Profit (Jan)"
-          value={`$${profit.toLocaleString()}`}
-          icon={DollarSign}
-          variant="success"
+          title="Utilities"
+          value={`$${(expensesByCategory['utilities'] || 0).toLocaleString()}`}
+          icon={Receipt}
+          trend={{ value: 'All time', isPositive: false }}
+          variant="default"
+        />
+        <StatCard
+          title="Repairs"
+          value={`$${(expensesByCategory['repairs'] || 0).toLocaleString()}`}
+          icon={TrendingDown}
+          trend={{ value: 'All time', isPositive: false }}
+          variant="default"
         />
       </div>
 
@@ -137,12 +302,12 @@ const Expenses = () => {
               <YAxis stroke="hsl(var(--muted-foreground))" />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "hsl(var(--card))",
-                  border: "1px solid hsl(var(--border))",
-                  borderRadius: "var(--radius)",
+                  backgroundColor: 'hsl(var(--card))',
+                  border: '1px solid hsl(var(--border))',
+                  borderRadius: '8px',
                 }}
               />
-              <Bar dataKey="amount" fill="hsl(var(--danger))" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </CardContent>
@@ -157,10 +322,11 @@ const Expenses = () => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              <SelectItem value="Repairs">Repairs</SelectItem>
-              <SelectItem value="Maintenance">Maintenance</SelectItem>
-              <SelectItem value="Utilities">Utilities</SelectItem>
-              <SelectItem value="Cleaning">Cleaning</SelectItem>
+              <SelectItem value="utilities">Utilities</SelectItem>
+              <SelectItem value="repairs">Repairs</SelectItem>
+              <SelectItem value="maintenance">Maintenance</SelectItem>
+              <SelectItem value="cleaning">Cleaning</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
             </SelectContent>
           </Select>
         </CardContent>
@@ -169,54 +335,226 @@ const Expenses = () => {
       {/* Expenses Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Recent Expenses</CardTitle>
+          <CardTitle>Expense Records</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="data-table">
+            <table className="w-full">
               <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Property</th>
-                  <th>Category</th>
-                  <th>Description</th>
-                  <th>Amount</th>
-                  <th>Action</th>
+                <tr className="border-b">
+                  <th className="text-left p-3 text-sm font-semibold">Property</th>
+                  <th className="text-left p-3 text-sm font-semibold">Category</th>
+                  <th className="text-left p-3 text-sm font-semibold">Description</th>
+                  <th className="text-right p-3 text-sm font-semibold">Amount</th>
+                  <th className="text-left p-3 text-sm font-semibold">Date</th>
+                  <th className="text-center p-3 text-sm font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredExpenses.map((expense) => (
-                  <tr key={expense.id}>
-                    <td>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        {expense.date}
-                      </div>
-                    </td>
-                    <td className="font-medium">{expense.property}</td>
-                    <td>
-                      <span className="rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground">
+                  <tr key={expense.id} className="border-b hover:bg-gray-50">
+                    <td className="p-3 font-medium">{expense.properties?.name || 'Unknown'}</td>
+                    <td className="p-3">
+                      <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-medium">
                         {expense.category}
                       </span>
                     </td>
-                    <td>{expense.description}</td>
-                    <td className="font-semibold text-danger">
+                    <td className="p-3 text-sm text-gray-600">{expense.description}</td>
+                    <td className="p-3 text-right font-semibold text-red-600">
                       ${expense.amount.toLocaleString()}
                     </td>
-                    <td>
-                      <Button variant="outline" size="sm">
-                        View Receipt
-                      </Button>
+                    <td className="p-3 text-sm">
+                      {format(new Date(expense.expense_date), 'MMM dd, yyyy')}
+                    </td>
+                    <td className="p-3">
+                      <div className="flex items-center justify-center gap-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => openEditDialog(expense)}
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="text-red-600 hover:bg-red-50"
+                          onClick={() => handleDeleteExpense(expense.id)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+            {filteredExpenses.length === 0 && (
+              <p className="text-center text-gray-500 py-8">No expense records found</p>
+            )}
           </div>
         </CardContent>
       </Card>
+
+      {/* Add Expense Dialog */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Add Expense</DialogTitle>
+            <DialogDescription>
+              Record a new property expense or utility payment
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="property">Property *</Label>
+              <Select
+                value={expenseForm.property_id}
+                onValueChange={(value) => setExpenseForm({ ...expenseForm, property_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select property" />
+                </SelectTrigger>
+                <SelectContent>
+                  {properties.map(property => (
+                    <SelectItem key={property.id} value={property.id}>
+                      {property.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="category">Category *</Label>
+                <Select
+                  value={expenseForm.category}
+                  onValueChange={(value) => setExpenseForm({ ...expenseForm, category: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="utilities">Utilities</SelectItem>
+                    <SelectItem value="repairs">Repairs</SelectItem>
+                    <SelectItem value="maintenance">Maintenance</SelectItem>
+                    <SelectItem value="cleaning">Cleaning</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="amount">Amount ($) *</Label>
+                <Input
+                  id="amount"
+                  type="number"
+                  placeholder="0.00"
+                  value={expenseForm.amount}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, amount: parseFloat(e.target.value) })}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="description">Description *</Label>
+              <Textarea
+                id="description"
+                placeholder="Describe the expense..."
+                value={expenseForm.description}
+                onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="expense_date">Date *</Label>
+              <Input
+                id="expense_date"
+                type="date"
+                value={expenseForm.expense_date}
+                onChange={(e) => setExpenseForm({ ...expenseForm, expense_date: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setAddDialogOpen(false); resetForm(); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleAddExpense}>
+              Add Expense
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Expense Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Expense</DialogTitle>
+            <DialogDescription>
+              Update expense details
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit_category">Category</Label>
+                <Select
+                  value={expenseForm.category}
+                  onValueChange={(value) => setExpenseForm({ ...expenseForm, category: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="utilities">Utilities</SelectItem>
+                    <SelectItem value="repairs">Repairs</SelectItem>
+                    <SelectItem value="maintenance">Maintenance</SelectItem>
+                    <SelectItem value="cleaning">Cleaning</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit_amount">Amount ($)</Label>
+                <Input
+                  id="edit_amount"
+                  type="number"
+                  value={expenseForm.amount}
+                  onChange={(e) => setExpenseForm({ ...expenseForm, amount: parseFloat(e.target.value) })}
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit_description">Description</Label>
+              <Textarea
+                id="edit_description"
+                value={expenseForm.description}
+                onChange={(e) => setExpenseForm({ ...expenseForm, description: e.target.value })}
+                rows={3}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit_expense_date">Date</Label>
+              <Input
+                id="edit_expense_date"
+                type="date"
+                value={expenseForm.expense_date}
+                onChange={(e) => setExpenseForm({ ...expenseForm, expense_date: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => { setEditDialogOpen(false); setSelectedExpense(null); }}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateExpense}>
+              Save Changes
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
 
-export default Expenses;
+export default ExpensesNew;
