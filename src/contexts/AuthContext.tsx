@@ -25,7 +25,8 @@ export const useAuth = () => {
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
-  const [userRole, setUserRole] = useState<'admin' | 'tenant' | null>((localStorage.getItem('yorent_role') as 'admin' | 'tenant' | null) ?? null);
+  // Don't load role from localStorage - force fresh authentication
+  const [userRole, setUserRole] = useState<'admin' | 'tenant' | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -37,20 +38,36 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.setItem('yorent_role', role);
       } catch {}
     };
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    
+    // Security: Check if sessions should persist (set to false for always requiring login)
+    const requireLoginAlways = import.meta.env.VITE_REQUIRE_LOGIN_ALWAYS === 'true';
+    
+    const initAuth = async () => {
+      if (requireLoginAlways) {
+        // Clear any existing session for security
+        await supabase.auth.signOut({ scope: 'local' });
+        setLoading(false);
+        return;
+      }
+      
+      // Get initial session
+      const { data: { session } } = await supabase.auth.getSession();
       setSession(session);
       setUser(session?.user ?? null);
+      
       if (session?.user) {
         const role = computeRoleFromEmail(session.user.email || '');
         setUserRole(role as 'admin' | 'tenant');
         localStorage.setItem('yorent_role', role);
         setLoading(false);
+        // Fire and forget - don't await
         upsertUserRole(session.user.id, role as 'admin' | 'tenant');
       } else {
         setLoading(false);
       }
-    });
+    };
+    
+    initAuth();
 
     // Listen for auth changes
     const {
