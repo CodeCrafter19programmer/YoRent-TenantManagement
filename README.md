@@ -1,13 +1,17 @@
 
 # YoRent - Complete Tenant Management System
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2FCodeCrafter19programmer%2FYoRent-Fresh&env=VITE_SUPABASE_PROJECT_ID,VITE_SUPABASE_PUBLISHABLE_KEY,VITE_SUPABASE_URL&envDescription=Supabase%20credentials%20required%20for%20backend%20integration&envLink=https%3A%2F%2Fsupabase.com%2Fdashboard%2Fproject%2Fjdowddqkygnttbsxghvc%2Fsettings%2Fapi)
+[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/CodeCrafter19programmer/YoRent-Fresh)
+
+**Live Demo:** [https://yorent.netlify.app](https://yorent.netlify.app)
 
 A comprehensive tenant management system with authentication, payment tracking, notifications, and tax accountability features. 🏠
 
 ## 🚀 Quick Deploy
 
-Click the button above to deploy to Vercel with one click!
+Click the button above to deploy to Netlify with one click!
+
+> **Note:** The live application is hosted at **yorent.netlify.app**. If your GitHub repository shows a different URL (like `yo-rent-fresh.vercel.app`), update it in your repository settings under "About" → "Edit repository details" → "Website".
 
 ## ✨ Features
 
@@ -32,7 +36,7 @@ Click the button above to deploy to Vercel with one click!
 - **Backend:** Supabase (PostgreSQL + Auth + Realtime)
 - **UI:** Tailwind CSS + shadcn/ui
 - **Icons:** Lucide React
-- **Deployment:** Vercel
+- **Deployment:** Netlify
 
 ## Project info
 

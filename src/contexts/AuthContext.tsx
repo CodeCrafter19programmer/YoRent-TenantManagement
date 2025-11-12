@@ -58,6 +58,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } = supabase.auth.onAuthStateChange(async (event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
+      if (event === 'SIGNED_OUT') {
+        setUserRole(null);
+        localStorage.removeItem('yorent_role');
+        setLoading(false);
+        return;
+      }
+      
       if (session?.user) {
         const role = (session.user.email || '').toLowerCase() === (import.meta.env.VITE_ADMIN_EMAIL || 'admin@yorent.com').toLowerCase() ? 'admin' : 'tenant';
         setUserRole(role as 'admin' | 'tenant');
@@ -66,6 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try { await supabase.from('user_roles').upsert({ user_id: session.user.id, role }, { onConflict: 'user_id' }); } catch {}
       } else {
         setUserRole(null);
+        localStorage.removeItem('yorent_role');
         setLoading(false);
       }
     });
@@ -73,56 +82,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
-  const fetchUserRole = async (userId: string) => {
-    try {
-      console.log('Fetching role for user:', userId);
-      
-      const { data, error } = await supabase
-        .from('user_roles')
-        .select('role, created_at')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(); // Use maybeSingle instead of single to handle no results
-
-      console.log('Role query result:', { data, error });
-
-      if (error) {
-        console.error('Error fetching user role:', error);
-        setUserRole(null);
-      } else {
-        const normalizedRole =
-          data && typeof (data as any).role === 'string'
-            ? ((data as any).role as string).toLowerCase()
-            : null;
-        setUserRole((normalizedRole as 'admin' | 'tenant' | null) || null);
-      }
-    } catch (error) {
-      console.error('Error fetching user role:', error);
-      setUserRole(null);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const signIn = async (email: string, password: string) => {
     try {
       const result = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      console.log('Sign-in result:', { error: result.error, user: result.data?.user?.id });
-      if (!result.error && result.data.user) {
+      if (!result.error && result.data.user && result.data.session) {
         // Automatically determine role based on email
         const adminEmail = import.meta.env.VITE_ADMIN_EMAIL || 'admin@yorent.com';
         const role = email.toLowerCase() === adminEmail.toLowerCase() ? 'admin' : 'tenant';
         
-        // Upsert the role
-        await supabase.from('user_roles').upsert(
-          { user_id: result.data.user.id, role },
-          { onConflict: 'user_id' }
-        );
-        await fetchUserRole(result.data.user.id);
+        // Set all states immediately to prevent spinner issues
+        setUser(result.data.user);
+        setSession(result.data.session);
+        setUserRole(role);
+        localStorage.setItem('yorent_role', role);
+        setLoading(false);
+        
+        // Upsert the role in background (fire and forget)
+        (async () => {
+          try {
+            await supabase.from('user_roles').upsert(
+              { user_id: result.data.user.id, role },
+              { onConflict: 'user_id' }
+            );
+          } catch {}
+        })();
       }
       return { error: result.error };
     } catch (err: any) {
@@ -164,7 +150,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    try {
+      setLoading(true);
+      localStorage.removeItem('yorent_role');
+      setUserRole(null);
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Sign out error:', error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const value = {
