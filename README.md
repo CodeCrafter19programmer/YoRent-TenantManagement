@@ -1,7 +1,7 @@
 
 # YoRent - Complete Tenant Management System
 
-[![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/CodeCrafter19programmer/YoRent-Fresh)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/CodeCrafter19programmer/YoRent-Fresh)
 
 **Live Demo:** [https://yorent.netlify.app](https://yorent.netlify.app)
 
@@ -9,9 +9,7 @@ A comprehensive tenant management system with authentication, payment tracking, 
 
 ## 🚀 Quick Deploy
 
-Click the button above to deploy to Netlify with one click!
-
-> **Note:** The live application is hosted at **yorent.netlify.app**. If your GitHub repository shows a different URL (like `yo-rent-fresh.vercel.app`), update it in your repository settings under "About" → "Edit repository details" → "Website".
+Click the button above to deploy to Vercel with one click!
 
 ## ✨ Features
 
@@ -36,7 +34,7 @@ Click the button above to deploy to Netlify with one click!
 - **Backend:** Supabase (PostgreSQL + Auth + Realtime)
 - **UI:** Tailwind CSS + shadcn/ui
 - **Icons:** Lucide React
-- **Deployment:** Netlify
+- **Deployment:** Vercel
 
 ## Project info
 

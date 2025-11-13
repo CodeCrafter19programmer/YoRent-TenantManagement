@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
+import { mockApi } from '@/lib/mockApi';
 import { useToast } from '@/hooks/use-toast';
 import { Badge } from '@/components/ui/badge';
 
@@ -41,12 +41,7 @@ const Policies = () => {
 
   const fetchPolicies = async () => {
     try {
-      const { data, error } = await supabase
-        .from('policies')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await mockApi.getPolicies();
       setPolicies(data || []);
     } catch (error: any) {
       toast({
@@ -63,19 +58,12 @@ const Policies = () => {
     try {
       if (editingPolicy) {
         // Update existing policy
-        const { error } = await supabase
-          .from('policies')
-          .update({ ...policyForm, updated_at: new Date().toISOString() })
-          .eq('id', editingPolicy.id);
-
+        const { error } = await mockApi.updatePolicy(editingPolicy.id, { ...policyForm });
         if (error) throw error;
         toast({ title: 'Success', description: 'Policy updated successfully' });
       } else {
         // Create new policy
-        const { error } = await supabase
-          .from('policies')
-          .insert([policyForm]);
-
+        const { error } = await mockApi.addPolicy(policyForm as any);
         if (error) throw error;
         toast({ title: 'Success', description: 'Policy created successfully' });
       }
@@ -96,11 +84,7 @@ const Policies = () => {
     if (!confirm('Are you sure you want to delete this policy?')) return;
 
     try {
-      const { error } = await supabase
-        .from('policies')
-        .delete()
-        .eq('id', policyId);
-
+      const { error } = await mockApi.deletePolicy(policyId);
       if (error) throw error;
       toast({ title: 'Success', description: 'Policy deleted successfully' });
       fetchPolicies();
@@ -115,11 +99,7 @@ const Policies = () => {
 
   const handleToggleActive = async (policy: Policy) => {
     try {
-      const { error } = await supabase
-        .from('policies')
-        .update({ is_active: !policy.is_active, updated_at: new Date().toISOString() })
-        .eq('id', policy.id);
-
+      const { error } = await mockApi.updatePolicy(policy.id, { is_active: !policy.is_active });
       if (error) throw error;
       toast({ 
         title: 'Success', 

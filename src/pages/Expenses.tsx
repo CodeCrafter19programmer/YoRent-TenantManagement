@@ -8,7 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatCard } from '@/components/StatCard';
-import { supabase } from '@/integrations/supabase/client';
+import { mockApi } from '@/lib/mockApi';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 import {
@@ -59,32 +59,13 @@ const ExpensesNew = () => {
   useEffect(() => {
     fetchExpenses();
     fetchProperties();
-
-    // Real-time subscription
-    const subscription = supabase
-      .channel('expenses-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'utilities_expenses' }, () => {
-        fetchExpenses();
-      })
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const fetchExpenses = async () => {
     try {
-      const { data, error } = await supabase
-        .from('utilities_expenses')
-        .select(`
-          *,
-          properties (name)
-        `)
-        .order('expense_date', { ascending: false });
-
-      if (error) throw error;
-      setExpenses(data || []);
+      const data = await mockApi.getExpenses();
+      // Sort by date desc to keep behavior similar
+      setExpenses((data || []).sort((a, b) => new Date(b.expense_date).getTime() - new Date(a.expense_date).getTime()) as any);
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -98,11 +79,7 @@ const ExpensesNew = () => {
 
   const fetchProperties = async () => {
     try {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('id, name');
-
-      if (error) throw error;
+      const data = await mockApi.getPropertiesLite();
       setProperties(data || []);
     } catch (error: any) {
       console.error('Error fetching properties:', error);
@@ -111,10 +88,7 @@ const ExpensesNew = () => {
 
   const handleAddExpense = async () => {
     try {
-      const { error } = await supabase
-        .from('utilities_expenses')
-        .insert([expenseForm]);
-
+      const { error } = await mockApi.addExpense(expenseForm as any);
       if (error) throw error;
 
       toast({ title: 'Success', description: 'Expense added successfully' });
@@ -134,11 +108,7 @@ const ExpensesNew = () => {
     if (!selectedExpense) return;
 
     try {
-      const { error } = await supabase
-        .from('utilities_expenses')
-        .update(expenseForm)
-        .eq('id', selectedExpense.id);
-
+      const { error } = await mockApi.updateExpense(selectedExpense.id, expenseForm as any);
       if (error) throw error;
 
       toast({ title: 'Success', description: 'Expense updated successfully' });
@@ -158,11 +128,7 @@ const ExpensesNew = () => {
     if (!confirm('Are you sure you want to delete this expense?')) return;
 
     try {
-      const { error } = await supabase
-        .from('utilities_expenses')
-        .delete()
-        .eq('id', expenseId);
-
+      const { error } = await mockApi.deleteExpense(expenseId);
       if (error) throw error;
 
       toast({ title: 'Success', description: 'Expense deleted successfully' });

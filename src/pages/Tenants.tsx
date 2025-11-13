@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { supabase } from '@/integrations/supabase/client';
+import { mockApi } from '@/lib/mockApi';
 import { useToast } from '@/hooks/use-toast';
 import { InvoiceModal } from '@/components/InvoiceModal';
 
@@ -64,27 +64,7 @@ const TenantsNew = () => {
 
   const fetchTenants = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenants')
-        .select(`
-          id,
-          full_name,
-          email,
-          phone,
-          monthly_rent,
-          lease_start,
-          lease_end,
-          status,
-          deposit,
-          property:property_id (
-            id,
-            name,
-            address
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await mockApi.getTenants();
       setTenants(data || []);
     } catch (error: any) {
       toast({
@@ -99,14 +79,7 @@ const TenantsNew = () => {
 
   const fetchTenantPayments = async (tenantId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*')
-        .eq('tenant_id', tenantId)
-        .eq('status', 'paid')
-        .order('paid_date', { ascending: false });
-
-      if (error) throw error;
+      const data = await mockApi.getTenantPayments(tenantId);
       setPayments(data || []);
     } catch (error: any) {
       toast({
@@ -136,11 +109,7 @@ const TenantsNew = () => {
     if (!selectedTenant) return;
 
     try {
-      const { error } = await supabase
-        .from('tenants')
-        .update(editForm)
-        .eq('id', selectedTenant.id);
-
+      const { error } = await mockApi.updateTenant(selectedTenant.id, editForm);
       if (error) throw error;
 
       toast({

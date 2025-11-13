@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { mockApi } from '@/lib/mockApi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -56,57 +56,29 @@ const TenantDashboard = () => {
   useEffect(() => {
     if (user) {
       fetchTenantData();
-      fetchPayments();
-      fetchNotifications();
       fetchPolicies();
-      
-      // Subscribe to real-time updates
-      const paymentsSubscription = supabase
-        .channel('tenant-payments')
-        .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'payments' },
-          () => fetchPayments()
-        )
-        .subscribe();
-
-      const notificationsSubscription = supabase
-        .channel('tenant-notifications')
-        .on('postgres_changes',
-          { event: '*', schema: 'public', table: 'notifications' },
-          () => fetchNotifications()
-        )
-        .subscribe();
-
-      return () => {
-        paymentsSubscription.unsubscribe();
-        notificationsSubscription.unsubscribe();
-      };
+      fetchNotifications();
     }
   }, [user]);
 
+  useEffect(() => {
+    if (tenantData) {
+      fetchPayments();
+    }
+  }, [tenantData]);
+
   const fetchTenantData = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenants')
-        .select(`
-          id,
-          full_name,
-          email,
-          monthly_rent,
-          properties:property_id (
-            name,
-            address
-          )
-        `)
-        .eq('user_id', user?.id)
-        .single();
-
-      if (error) throw error;
-      
-      setTenantData({
-        ...data,
-        property: data.properties
-      });
+      const tenant = await mockApi.getTenantByUserId(user?.id as string);
+      if (tenant) {
+        setTenantData({
+          id: tenant.id,
+          full_name: tenant.full_name,
+          email: tenant.email,
+          monthly_rent: tenant.monthly_rent,
+          property: tenant.property || { name: 'N/A', address: '' },
+        } as any);
+      }
     } catch (error) {
       console.error('Error fetching tenant data:', error);
     }
@@ -114,13 +86,8 @@ const TenantDashboard = () => {
 
   const fetchPayments = async () => {
     try {
-      const { data, error } = await supabase
-        .from('payments')
-        .select('*')
-        .in('tenant_id', [tenantData?.id])
-        .order('due_date', { ascending: false });
-
-      if (error) throw error;
+      if (!tenantData) return;
+      const data = await mockApi.getPaymentsByTenantId(tenantData.id);
       setPayments(data || []);
     } catch (error) {
       console.error('Error fetching payments:', error);
@@ -129,14 +96,7 @@ const TenantDashboard = () => {
 
   const fetchNotifications = async () => {
     try {
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user?.id)
-        .order('created_at', { ascending: false })
-        .limit(10);
-
-      if (error) throw error;
+      const data = await mockApi.getNotifications(user?.id || '');
       setNotifications(data || []);
     } catch (error) {
       console.error('Error fetching notifications:', error);
@@ -147,30 +107,16 @@ const TenantDashboard = () => {
 
   const fetchPolicies = async () => {
     try {
-      const { data, error } = await supabase
-        .from('policies')
-        .select('id, title, content, category')
-        .eq('is_active', true)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setPolicies(data || []);
+      const data = await mockApi.getActivePolicies();
+      setPolicies((data || []).map(p => ({ id: p.id, title: p.title, content: p.content, category: p.category })));
     } catch (error) {
       console.error('Error fetching policies:', error);
     }
   };
 
-  const markNotificationAsRead = async (notificationId: string) => {
-    try {
-      await supabase
-        .from('notifications')
-        .update({ read: true })
-        .eq('id', notificationId);
-      
-      fetchNotifications();
-    } catch (error) {
-      console.error('Error marking notification as read:', error);
-    }
+  const markNotificationAsRead = async (_notificationId: string) => {
+    // No-op in mock mode
+    fetchNotifications();
   };
 
   const getPaymentStatusColor = (status: string) => {

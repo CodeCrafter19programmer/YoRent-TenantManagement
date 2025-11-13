@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { mockApi } from '@/lib/mockApi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,62 +54,29 @@ const AdminNotifications = () => {
     if (userRole === 'admin') {
       fetchAdminNotifications();
       fetchTenants();
-      
-      // Subscribe to real-time updates
-      const subscription = supabase
-        .channel('admin-notifications')
-        .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'payments' },
-          handlePaymentChange
-        )
-        .subscribe();
-
-      return () => subscription.unsubscribe();
     }
   }, [userRole]);
 
   const fetchAdminNotifications = async () => {
     try {
-      // Get payment-related notifications
-      const { data: payments, error: paymentsError } = await supabase
-        .from('payments')
-        .select(`
-          id,
-          amount,
-          month,
-          due_date,
-          status,
-          created_at,
-          tenants:tenant_id (
-            full_name
-          ),
-          properties:property_id (
-            name
-          )
-        `)
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (paymentsError) throw paymentsError;
-
-      // Transform payments into notification format
-      const paymentNotifications: AdminNotification[] = payments.map(payment => {
+      const payments = await mockApi.getPayments();
+      const paymentNotifications: AdminNotification[] = payments.map((payment: any) => {
         let type = 'payment_created';
         let title = 'New Payment Record';
-        let message = `Payment record created for ${payment.tenants?.full_name}`;
+        let message = `Payment record created for ${payment.tenant?.full_name}`;
 
         if (payment.status === 'paid') {
           type = 'payment_received';
           title = 'Payment Received';
-          message = `Payment of $${payment.amount} received from ${payment.tenants?.full_name}`;
+          message = `Payment of $${payment.amount} received from ${payment.tenant?.full_name}`;
         } else if (payment.status === 'overdue') {
           type = 'payment_overdue';
           title = 'Payment Overdue';
-          message = `Payment of $${payment.amount} is overdue from ${payment.tenants?.full_name}`;
+          message = `Payment of $${payment.amount} is overdue from ${payment.tenant?.full_name}`;
         } else if (new Date(payment.due_date) <= new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)) {
           type = 'payment_due_soon';
           title = 'Payment Due Soon';
-          message = `Payment of $${payment.amount} due soon from ${payment.tenants?.full_name}`;
+          message = `Payment of $${payment.amount} due soon from ${payment.tenant?.full_name}`;
         }
 
         return {
@@ -117,11 +84,11 @@ const AdminNotifications = () => {
           type,
           title,
           message,
-          tenant_name: payment.tenants?.full_name,
-          property_name: payment.properties?.name,
+          tenant_name: payment.tenant?.full_name,
+          property_name: payment.property?.name,
           amount: payment.amount,
           due_date: payment.due_date,
-          created_at: payment.created_at
+          created_at: new Date().toISOString()
         };
       });
 
@@ -136,25 +103,8 @@ const AdminNotifications = () => {
 
   const fetchTenants = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenants')
-        .select(`
-          id,
-          user_id,
-          full_name,
-          email,
-          properties:property_id (
-            name
-          )
-        `)
-        .eq('status', 'active');
-
-      if (error) throw error;
-      
-      setTenants(data.map(tenant => ({
-        ...tenant,
-        property: tenant.properties
-      })));
+      const data = await mockApi.getActiveTenants();
+      setTenants(data as any);
     } catch (error) {
       console.error('Error fetching tenants:', error);
     }
@@ -171,34 +121,15 @@ const AdminNotifications = () => {
     try {
       if (formData.recipient === 'all') {
         // Send to all tenants
-        const notifications = tenants.map(tenant => ({
-          user_id: tenant.user_id,
-          title: formData.title,
-          message: formData.message,
-          type: formData.type
-        }));
-
-        const { error } = await supabase
-          .from('notifications')
-          .insert(notifications);
-
-        if (error) throw error;
+        for (const tenant of tenants) {
+          await mockApi.createNotification(tenant.user_id, formData.title, formData.message, formData.type);
+        }
         toast.success(`Notification sent to ${tenants.length} tenants`);
       } else {
         // Send to specific tenant
         const tenant = tenants.find(t => t.id === formData.tenant_id);
         if (!tenant) throw new Error('Tenant not found');
-
-        const { error } = await supabase
-          .from('notifications')
-          .insert({
-            user_id: tenant.user_id,
-            title: formData.title,
-            message: formData.message,
-            type: formData.type
-          });
-
-        if (error) throw error;
+        await mockApi.createNotification(tenant.user_id, formData.title, formData.message, formData.type);
         toast.success('Notification sent successfully');
       }
 

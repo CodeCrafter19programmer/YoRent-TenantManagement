@@ -7,7 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { StatCard } from '@/components/StatCard';
-import { supabase } from '@/integrations/supabase/client';
+import { mockApi } from '@/lib/mockApi';
 import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
 
@@ -59,33 +59,14 @@ const RentManagementNew = () => {
   useEffect(() => {
     fetchPayments();
     fetchTenants();
-
-    // Real-time subscription
-    const subscription = supabase
-      .channel('payments-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'payments' }, () => {
-        fetchPayments();
-      })
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const fetchPayments = async () => {
     try {
-      const { data, error } = await supabase
-        .from('payments')
-        .select(`
-          *,
-          tenants (full_name),
-          properties (name)
-        `)
-        .order('due_date', { ascending: false });
-
-      if (error) throw error;
-      setPayments(data || []);
+      const data = await mockApi.getPayments();
+      // Shape to expected structure for this page
+      const shaped = (data as any[]).map(p => ({ ...p, tenants: p.tenant, properties: p.property }));
+      setPayments(shaped as any);
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -99,13 +80,8 @@ const RentManagementNew = () => {
 
   const fetchTenants = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenants')
-        .select('id, full_name, monthly_rent, property_id')
-        .eq('status', 'active');
-
-      if (error) throw error;
-      setTenants(data || []);
+      const data = await mockApi.getActiveTenants();
+      setTenants((data as any[]).map(t => ({ id: t.id, full_name: t.full_name, monthly_rent: t.monthly_rent })));
     } catch (error: any) {
       console.error('Error fetching tenants:', error);
     }
@@ -120,13 +96,7 @@ const RentManagementNew = () => {
         return;
       }
 
-      const { error } = await supabase
-        .from('payments')
-        .insert([{
-          ...paymentForm,
-          property_id: tenant.property_id || null,
-        }]);
-
+      const { error } = await mockApi.createPayment({ ...paymentForm, property_id: (tenant as any).property_id } as any);
       if (error) throw error;
 
       toast({ title: 'Success', description: 'Payment record created successfully' });
@@ -146,11 +116,7 @@ const RentManagementNew = () => {
     if (!selectedPayment) return;
 
     try {
-      const { error } = await supabase
-        .from('payments')
-        .update(paymentForm)
-        .eq('id', selectedPayment.id);
-
+      const { error } = await mockApi.updatePayment(selectedPayment.id, paymentForm as any);
       if (error) throw error;
 
       toast({ title: 'Success', description: 'Payment updated successfully' });
@@ -168,14 +134,7 @@ const RentManagementNew = () => {
 
   const handleMarkAsPaid = async (paymentId: string) => {
     try {
-      const { error } = await supabase
-        .from('payments')
-        .update({
-          status: 'paid',
-          paid_date: new Date().toISOString().split('T')[0],
-        })
-        .eq('id', paymentId);
-
+      const { error } = await mockApi.updatePayment(paymentId, { status: 'paid', paid_date: new Date().toISOString().split('T')[0] } as any);
       if (error) throw error;
 
       toast({ title: 'Success', description: 'Payment marked as paid' });

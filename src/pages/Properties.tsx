@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { supabase } from '@/integrations/supabase/client';
+import { mockApi } from '@/lib/mockApi';
 import { useToast } from '@/hooks/use-toast';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
@@ -62,20 +62,7 @@ const PropertiesNew = () => {
 
   const fetchProperties = async () => {
     try {
-      const { data, error } = await supabase
-        .from('properties')
-        .select(`
-          *,
-          tenants (
-            id,
-            full_name,
-            email,
-            status
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
+      const data = await mockApi.getProperties();
       setProperties(data || []);
     } catch (error: any) {
       toast({
@@ -90,12 +77,7 @@ const PropertiesNew = () => {
 
   const fetchTenants = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenants')
-        .select('id, full_name, email, status')
-        .eq('status', 'active');
-
-      if (error) throw error;
+      const data = await mockApi.getActiveTenants();
       setTenants(data || []);
     } catch (error: any) {
       console.error('Error fetching tenants:', error);
@@ -104,10 +86,7 @@ const PropertiesNew = () => {
 
   const handleAddProperty = async () => {
     try {
-      const { error } = await supabase
-        .from('properties')
-        .insert([propertyForm]);
-
+      const { error } = await mockApi.addProperty(propertyForm as any);
       if (error) throw error;
 
       toast({
@@ -130,11 +109,7 @@ const PropertiesNew = () => {
     if (!selectedProperty) return;
 
     try {
-      const { error } = await supabase
-        .from('properties')
-        .update(propertyForm)
-        .eq('id', selectedProperty.id);
-
+      const { error } = await mockApi.updateProperty(selectedProperty.id, propertyForm as any);
       if (error) throw error;
 
       toast({
@@ -157,11 +132,7 @@ const PropertiesNew = () => {
     if (!confirm('Are you sure you want to delete this property?')) return;
 
     try {
-      const { error } = await supabase
-        .from('properties')
-        .delete()
-        .eq('id', propertyId);
-
+      const { error } = await mockApi.deleteProperty(propertyId);
       if (error) throw error;
 
       toast({
@@ -180,18 +151,8 @@ const PropertiesNew = () => {
 
   const handleAssignTenant = async (propertyId: string, tenantId: string) => {
     try {
-      const { error } = await supabase
-        .from('tenants')
-        .update({ property_id: propertyId })
-        .eq('id', tenantId);
-
+      const { error } = await mockApi.assignTenant(propertyId, tenantId);
       if (error) throw error;
-
-      // Update property status to occupied
-      await supabase
-        .from('properties')
-        .update({ status: 'occupied' })
-        .eq('id', propertyId);
 
       toast({
         title: 'Success',

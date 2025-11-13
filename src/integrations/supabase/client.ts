@@ -31,6 +31,10 @@ class MockQueryBuilder {
 
 export const supabase: any = {
   from: (table: string) => new MockQueryBuilder(table),
+  channel: (_name: string) => ({
+    on: () => ({ subscribe: () => ({ unsubscribe: () => {} }) }),
+    subscribe: () => ({ unsubscribe: () => {} }),
+  }),
   auth: {
     signInWithPassword: async () => ({ data: { user: { id: 'mock-user' }, session: {} }, error: null }),
     signUp: async () => ({ data: { user: { id: 'mock-user' } }, error: null }),

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { mockApi } from '@/lib/mockApi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -66,43 +66,13 @@ const AdminPayments = () => {
     if (userRole === 'admin') {
       fetchPayments();
       fetchTenants();
-      
-      // Subscribe to real-time updates
-      const subscription = supabase
-        .channel('admin-payments')
-        .on('postgres_changes', 
-          { event: '*', schema: 'public', table: 'payments' },
-          () => fetchPayments()
-        )
-        .subscribe();
-
-      return () => subscription.unsubscribe();
     }
   }, [userRole]);
 
   const fetchPayments = async () => {
     try {
-      const { data, error } = await supabase
-        .from('payments')
-        .select(`
-          *,
-          tenants:tenant_id (
-            full_name,
-            email
-          ),
-          properties:property_id (
-            name
-          )
-        `)
-        .order('due_date', { ascending: false });
-
-      if (error) throw error;
-      
-      setPayments(data.map(payment => ({
-        ...payment,
-        tenant: payment.tenants,
-        property: payment.properties
-      })));
+      const data = await mockApi.getPayments();
+      setPayments(data as any);
     } catch (error) {
       console.error('Error fetching payments:', error);
       toast.error('Failed to fetch payments');
@@ -113,26 +83,8 @@ const AdminPayments = () => {
 
   const fetchTenants = async () => {
     try {
-      const { data, error } = await supabase
-        .from('tenants')
-        .select(`
-          id,
-          full_name,
-          email,
-          monthly_rent,
-          properties:property_id (
-            id,
-            name
-          )
-        `)
-        .eq('status', 'active');
-
-      if (error) throw error;
-      
-      setTenants(data.map(tenant => ({
-        ...tenant,
-        property: tenant.properties
-      })));
+      const data = await mockApi.getActiveTenants();
+      setTenants(data as any);
     } catch (error) {
       console.error('Error fetching tenants:', error);
     }
@@ -151,10 +103,7 @@ const AdminPayments = () => {
       };
 
       if (editingPayment) {
-        const { error } = await supabase
-          .from('payments')
-          .update(paymentData)
-          .eq('id', editingPayment.id);
+        const { error } = await mockApi.updatePayment(editingPayment.id, paymentData as any);
 
         if (error) throw error;
         
@@ -162,12 +111,7 @@ const AdminPayments = () => {
         if (formData.status === 'paid' && editingPayment.status !== 'paid') {
           const tenant = tenants.find(t => t.id === formData.tenant_id);
           if (tenant) {
-            await createNotification(
-              tenant.id,
-              'Payment Confirmed',
-              `Your payment of $${formData.amount} for ${formData.month} has been confirmed.`,
-              'payment_success'
-            );
+            await createNotification(tenant.id, 'Payment Confirmed', `Your payment of $${formData.amount} for ${formData.month} has been confirmed.`, 'payment_success');
           }
         }
         
@@ -175,12 +119,7 @@ const AdminPayments = () => {
       } else {
         // Get property_id from tenant
         const tenant = tenants.find(t => t.id === formData.tenant_id);
-        const { error } = await supabase
-          .from('payments')
-          .insert({
-            ...paymentData,
-            property_id: tenant?.property.id
-          });
+        const { error } = await mockApi.createPayment({ ...(paymentData as any), property_id: tenant?.property?.id });
 
         if (error) throw error;
         toast.success('Payment created successfully');
@@ -197,23 +136,7 @@ const AdminPayments = () => {
 
   const createNotification = async (tenantId: string, title: string, message: string, type: string) => {
     try {
-      // Get tenant's user_id
-      const { data: tenant } = await supabase
-        .from('tenants')
-        .select('user_id')
-        .eq('id', tenantId)
-        .single();
-
-      if (tenant?.user_id) {
-        await supabase
-          .from('notifications')
-          .insert({
-            user_id: tenant.user_id,
-            title,
-            message,
-            type
-          });
-      }
+      await mockApi.createNotification(tenantId, title, message, type);
     } catch (error) {
       console.error('Error creating notification:', error);
     }

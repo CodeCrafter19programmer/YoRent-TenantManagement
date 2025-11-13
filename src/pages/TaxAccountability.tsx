@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/integrations/supabase/client';
+import { mockApi } from '@/lib/mockApi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -74,42 +74,18 @@ const TaxAccountability = () => {
   }, [userRole, selectedYear]);
 
   const fetchTaxRecords = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('tax_records')
-        .select('*')
-        .eq('year', selectedYear)
-        .order('month', { ascending: false });
-
-      if (error && error.code !== 'PGRST116') { // Table doesn't exist
-        throw error;
-      }
-      
-      setTaxRecords(data || []);
-    } catch (error) {
-      console.error('Error fetching tax records:', error);
-      // Create the table if it doesn't exist
-      await createTaxRecordsTable();
-    }
+    // In frontend-only mode, we don't persist tax records. Leave the list as-is.
+    setTaxRecords(prev => prev);
   };
 
   const createTaxRecordsTable = async () => {
-    try {
-      // This would typically be done via migration, but for demo purposes
-      console.log('Tax records table needs to be created via migration');
-      setTaxRecords([]);
-    } catch (error) {
-      console.error('Error creating tax records table:', error);
-    }
+    // No-op in mock mode
+    setTaxRecords([]);
   };
 
   const fetchProperties = async () => {
     try {
-      const { data, error } = await supabase
-        .from('properties')
-        .select('id, name');
-
-      if (error) throw error;
+      const data = await mockApi.getPropertiesLite();
       setProperties(data || []);
     } catch (error) {
       console.error('Error fetching properties:', error);
@@ -118,22 +94,18 @@ const TaxAccountability = () => {
 
   const fetchUtilityExpenses = async () => {
     try {
-      const { data, error } = await supabase
-        .from('utilities_expenses')
-        .select(`
-          *,
-          properties:property_id (
-            name
-          )
-        `)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      
-      setUtilityExpenses(data.map(expense => ({
-        ...expense,
-        property: expense.properties
-      })));
+      const data = await mockApi.getExpenses();
+      setUtilityExpenses((data as any[]).map(e => ({
+        id: e.id,
+        property_id: e.property_id,
+        month: new Date(e.expense_date).toLocaleString('en-US', { month: 'long' }),
+        electricity: e.category === 'utilities' ? e.amount : 0,
+        water: 0,
+        gas: 0,
+        maintenance: e.category === 'maintenance' ? e.amount : 0,
+        other: e.category !== 'utilities' && e.category !== 'maintenance' ? e.amount : 0,
+        property: { name: (e as any).properties?.name || 'N/A' },
+      })) as any);
     } catch (error) {
       console.error('Error fetching utility expenses:', error);
     } finally {
@@ -142,58 +114,46 @@ const TaxAccountability = () => {
   };
 
   const calculateMonthlyTaxRecord = async (month: string, year: number) => {
-    try {
-      // Get total revenue for the month
-      const { data: payments, error: paymentsError } = await supabase
-        .from('payments')
-        .select('amount')
-        .eq('status', 'paid')
-        .ilike('month', `%${month}%${year}%`);
+    // Approximate calculation from mock data
+    const payments = await mockApi.getPayments();
+    const expenses = await mockApi.getExpenses();
+    const monthMatches = (d: string) => {
+      const date = new Date(d);
+      const m = date.toLocaleString('en-US', { month: 'long' });
+      const y = date.getFullYear();
+      return m === month && y === year;
+    };
 
-      if (paymentsError) throw paymentsError;
+    const totalRevenue = (payments as any[])
+      .filter(p => p.status === 'paid' && (typeof p.month === 'string' ? p.month.includes(month) : monthMatches(p.paid_date || p.due_date)))
+      .reduce((sum, p) => sum + p.amount, 0);
 
-      const totalRevenue = payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const utilitiesThisMonth = (expenses as any[]).filter(e => monthMatches(e.expense_date));
+    const electricity = utilitiesThisMonth.filter(e => e.category === 'utilities').reduce((s, e) => s + e.amount, 0);
+    const maintenance = utilitiesThisMonth.filter(e => e.category === 'maintenance').reduce((s, e) => s + e.amount, 0);
+    const water = 0;
+    const gas = 0;
+    const otherExpenses = utilitiesThisMonth.filter(e => !['utilities', 'maintenance'].includes(e.category)).reduce((s, e) => s + e.amount, 0);
+    const total_utilities = electricity + maintenance + water + gas + otherExpenses;
 
-      // Get total utilities for the month
-      const { data: utilities, error: utilitiesError } = await supabase
-        .from('utilities_expenses')
-        .select('electricity, water, gas, maintenance, other')
-        .ilike('month', `%${month}%${year}%`);
+    const netIncome = totalRevenue - total_utilities;
+    const taxRate = parseFloat(formData.tax_rate) / 100;
+    const taxAmount = netIncome * taxRate;
 
-      if (utilitiesError) throw utilitiesError;
-
-      const totalUtilities = utilities.reduce((sum, utility) => 
-        sum + utility.electricity + utility.water + utility.gas + utility.maintenance + utility.other, 0
-      );
-
-      const electricity = utilities.reduce((sum, utility) => sum + utility.electricity, 0);
-      const water = utilities.reduce((sum, utility) => sum + utility.water, 0);
-      const gas = utilities.reduce((sum, utility) => sum + utility.gas, 0);
-      const maintenance = utilities.reduce((sum, utility) => sum + utility.maintenance, 0);
-      const otherExpenses = utilities.reduce((sum, utility) => sum + utility.other, 0);
-
-      const netIncome = totalRevenue - totalUtilities;
-      const taxRate = parseFloat(formData.tax_rate) / 100;
-      const taxAmount = netIncome * taxRate;
-
-      return {
-        month,
-        year,
-        total_revenue: totalRevenue,
-        total_utilities: totalUtilities,
-        electricity,
-        water,
-        gas,
-        maintenance,
-        other_expenses: otherExpenses,
-        net_income: netIncome,
-        tax_rate: taxRate * 100,
-        tax_amount: taxAmount
-      };
-    } catch (error) {
-      console.error('Error calculating tax record:', error);
-      throw error;
-    }
+    return {
+      month,
+      year,
+      total_revenue: totalRevenue,
+      total_utilities,
+      electricity,
+      water,
+      gas,
+      maintenance,
+      other_expenses: otherExpenses,
+      net_income: netIncome,
+      tax_rate: taxRate * 100,
+      tax_amount: taxAmount
+    };
   };
 
   const handleSubmit = async (e: React.FormEvent) => {

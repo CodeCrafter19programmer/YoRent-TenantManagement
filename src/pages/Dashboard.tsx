@@ -3,7 +3,7 @@ import { Building2, Users, DollarSign, TrendingUp, Home, AlertCircle } from 'luc
 import { StatCard } from '@/components/StatCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/integrations/supabase/client';
+import { mockApi } from '@/lib/mockApi';
 import { useNavigate } from 'react-router-dom';
 import {
   BarChart,
@@ -53,36 +53,13 @@ const Dashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
-    
-    // Subscribe to real-time updates
-    const subscription = supabase
-      .channel('dashboard-updates')
-      .on('postgres_changes', { event: '*', schema: 'public' }, () => {
-        fetchDashboardData();
-      })
-      .subscribe();
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, []);
 
   const fetchDashboardData = async () => {
     try {
-      // Fetch properties
-      const { data: properties } = await supabase
-        .from('properties')
-        .select('*');
-
-      // Fetch tenants
-      const { data: tenants } = await supabase
-        .from('tenants')
-        .select('*');
-
-      // Fetch payments
-      const { data: payments } = await supabase
-        .from('payments')
-        .select('*, tenants(full_name), properties(name)');
+      const properties = await mockApi.getProperties();
+      const tenants = await mockApi.getTenants();
+      const payments = await mockApi.getPayments();
 
       const totalProperties = properties?.length || 0;
       const occupiedProperties = properties?.filter(p => p.status === 'occupied').length || 0;
@@ -107,8 +84,8 @@ const Dashboard = () => {
       const unpaid = payments?.filter(p => 
         p.status === 'unpaid' && new Date(p.due_date) < new Date()
       ).map(p => ({
-        tenant_name: p.tenants?.full_name || 'Unknown',
-        property_name: p.properties?.name || 'Unknown',
+        tenant_name: (p as any).tenant?.full_name || 'Unknown',
+        property_name: (p as any).property?.name || 'Unknown',
         amount: p.amount,
         days_overdue: Math.floor((new Date().getTime() - new Date(p.due_date).getTime()) / (1000 * 60 * 60 * 24))
       })) || [];
